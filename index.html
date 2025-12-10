@@ -98,7 +98,12 @@
     let connections = {};
     let file = null;
     let imageChunks = {}; 
-    const PEER_SERVER_HOST = '0.peerjs.com';
+    
+    // ⚠️ FIXED: This configuration is optimized for cross-network and cross-device connections.
+    const PEER_SERVER_HOST = '0.peerjs.com'; 
+    const PEER_SERVER_PORT = 443;
+    const PEER_SERVER_SECURE = true; 
+    
     const CHUNK_SIZE = 16 * 1024;
     
     // --- USERNAME LOGIC ---
@@ -159,7 +164,12 @@
     // --- P2P CONNECTION LOGIC ---
 
     function initializePeer() {
-        peer = new Peer({ host: PEER_SERVER_HOST, secure: true, port: 443 });
+        // 🚨 FIX APPLIED HERE
+        peer = new Peer({ 
+            host: PEER_SERVER_HOST, 
+            port: PEER_SERVER_PORT,
+            secure: PEER_SERVER_SECURE 
+        });
 
         peer.on('open', (id) => {
             document.getElementById('my-peer-id').innerText = id;
@@ -169,6 +179,7 @@
         });
         peer.on('error', (err) => {
             console.error('PeerJS Error:', err);
+            // This displays a more helpful error in the console
             document.getElementById('my-peer-id').innerText = 'ERROR: Check console.';
         });
     }
@@ -191,7 +202,6 @@
             alert(`Successfully connected to peer: ${targetId}! Now exchanging group IDs.`);
             updateConnectedCount();
             
-            // 🚨 NEW: When a new peer joins, the initiator immediately sends the list of their connected peers.
             sendGroupIDs(targetId);
         });
         conn.on('error', (err) => console.error(`Connection failed for ${targetId}:`, err));
@@ -208,7 +218,6 @@
                 alert(`New peer connected: ${conn.username} (${conn.peer})`);
                 updateConnectedCount();
                 
-                // 🚨 NEW: When a peer accepts a connection, they also send their current group IDs back.
                 sendGroupIDs(conn.peer);
             }
         });
@@ -233,7 +242,6 @@
                     senderId: conn.peer
                 };
             } else if (data.type === 'group_id_broadcast') {
-                // 🚨 NEW: Automatically connect to new peers in the list
                 handleGroupIDBroadcast(data.ids);
             }
         });
@@ -245,9 +253,7 @@
         });
     }
     
-    // 🚨 NEW FUNCTION: Sends the list of all peers I am currently connected to.
     function sendGroupIDs(targetPeerId) {
-        // Get all peer IDs currently connected, excluding the target and myself
         const groupIDs = Object.keys(connections).filter(id => id !== targetPeerId && id !== peer.id);
 
         if (groupIDs.length > 0) {
@@ -255,7 +261,6 @@
                 type: 'group_id_broadcast',
                 ids: groupIDs
             };
-            // Send the list ONLY to the newly connected peer
             if (connections[targetPeerId] && connections[targetPeerId].open) {
                  connections[targetPeerId].send(broadcastData);
                  console.log(`Sent group IDs to ${targetPeerId}:`, groupIDs);
@@ -263,12 +268,10 @@
         }
     }
     
-    // 🚨 NEW FUNCTION: Automatically connects to new IDs received in the group broadcast.
     function handleGroupIDBroadcast(receivedIDs) {
         receivedIDs.forEach(newId => {
             if (newId !== peer.id && !connections[newId]) {
                 console.log(`Attempting automated connection to new peer: ${newId}`);
-                // Use connectToPeer logic but without user input/alert for automation
                 const conn = peer.connect(newId, { metadata: { username: USERNAME } });
                 
                 conn.on('open', () => {
@@ -282,7 +285,7 @@
         });
     }
 
-    // --- IMAGE CHUNKING AND REASSEMBLY (No changes) ---
+    // --- IMAGE CHUNKING AND REASSEMBLY ---
     
     function handleIncomingImageChunk(chunkData, senderName) {
         const imgId = chunkData.id;
@@ -297,7 +300,7 @@
         }
     }
 
-    // --- SENDING LOGIC (No changes needed, broadcasts to all 'connections') ---
+    // --- SENDING LOGIC ---
     
     async function sendMessage() {
         const content = document.getElementById('message-input').value.trim();
