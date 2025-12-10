@@ -1,24 +1,9 @@
-That's a great next step! Adding a username makes your P2P app feel much more personalized and like a real social platform.
-
-Since the entire application is run through a single HTML file without a central server or database, the username must be handled locally in the user's browser storage. This means the user sets their name once, and the app remembers it.
-
-Here is the updated code for DataChain (index.html), which includes:
-
-A Username Input and Storage using the browser's localStorage.
-
-The ability for every post (text or image) to display the set Username instead of just the long Peer ID.
-
-✨ DataChain: P2P Social App with Usernames (index.html)
-Save this entire block as your new index.html file.
-
-HTML
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DataChain - P2P Social with Usernames</title>
+    <title>DataChain - P2P Group Chat</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         /* General Styles */
@@ -29,12 +14,12 @@ HTML
         /* Identity and Connection */
         #my-id-container { text-align: center; margin-bottom: 30px; }
         #my-peer-id { font-size: 1.4em; font-weight: bold; color: #D50000; padding: 5px 10px; background: #fff; border-radius: 4px; display: inline-block; word-break: break-all; }
-        #connection-area { display: flex; justify-content: center; margin-bottom: 20px; }
-        #connection-area input, #connection-area button { padding: 10px; border-radius: 5px; border: 1px solid #ccc; margin-right: 10px; }
-        #connection-area input { flex-grow: 1; max-width: 300px; }
-        #connection-area button { background-color: #4CAF50; color: white; border: none; cursor: pointer; font-weight: bold; }
-        #connection-area button:hover { background-color: #45a049; }
-        #connected-count { margin-left: 20px; align-self: center; font-weight: 600; color: #333; }
+        #connection-area { display: flex; flex-direction: column; align-items: center; margin-bottom: 20px; }
+        .connect-control { display: flex; width: 100%; max-width: 500px; margin-bottom: 10px; }
+        .connect-control input { padding: 10px; border-radius: 5px; border: 1px solid #ccc; flex-grow: 1; margin-right: 10px; }
+        .connect-control button { background-color: #4CAF50; color: white; padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        .connect-control button:hover { background-color: #45a049; }
+        #connected-count { margin-top: 10px; font-weight: 600; color: #333; }
         
         /* Username Specific Section */
         #username-section { background-color: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1); margin-bottom: 20px; text-align: center;}
@@ -66,14 +51,14 @@ HTML
 </head>
 <body>
 
-    <h1>DataChain P2P Feed 🔗</h1>
+    <h1>DataChain P2P Group Chat 🌐</h1>
     <div class="info-box">
-        Set your username below! Posts and images are transmitted directly between connected peers. Your username is saved locally in your browser.
+        This is a decentralized group chat. Connect to multiple friends by entering each of their Peer IDs individually. Every post (text or image) is broadcast directly to all connected peers.
     </div>
 
     <div id="username-section">
         <label for="username-input">Set Your Username:</label>
-        <input type="text" id="username-input" placeholder="e.g., ChainMaster" maxlength="20">
+        <input type="text" id="username-input" placeholder="e.g., GroupLeader" maxlength="20">
         <button id="save-username-button" onclick="saveUsername()">Save</button>
         <p>Current User: <span id="username-display"></span></p>
     </div>
@@ -83,16 +68,18 @@ HTML
     </div>
 
     <div id="connection-area">
-        <input type="text" id="target-id" placeholder="Enter Peer ID to Connect">
-        <button onclick="connectToPeer()">Connect</button>
+        <div class="connect-control">
+            <input type="text" id="target-id" placeholder="Enter Peer ID to Connect">
+            <button onclick="connectToPeer()">Connect to Group</button>
+        </div>
         <div id="connected-count">Connected Peers: 0</div>
     </div>
 
     <hr>
     
     <div class="post-box">
-        <h2>Share a Spark (Text or Picture)</h2>
-        <textarea id="message-input" placeholder="Type your text spark here..." maxlength="280"></textarea>
+        <h2>Broadcast a Spark (Text or Picture)</h2>
+        <textarea id="message-input" placeholder="Type your group message here..." maxlength="280"></textarea>
         
         <div id="file-input-container">
             <label for="file-input" class="file-label">Select Picture</label>
@@ -100,10 +87,10 @@ HTML
             <span id="file-status">No file selected.</span>
         </div>
         
-        <button id="send-button" onclick="sendMessage()">Send Spark</button>
+        <button id="send-button" onclick="sendMessage()">Send Spark to Group</button>
     </div>
 
-    <h2>Received Sparks</h2>
+    <h2>Group Feed</h2>
     <ul id="messages"></ul>
 
 <script>
@@ -186,13 +173,17 @@ HTML
         });
     }
     
+    // Connect to a new peer for the group chat
     function connectToPeer() {
-        const targetId = document.getElementById('target-id').value.trim();
+        const targetIdInput = document.getElementById('target-id');
+        const targetId = targetIdInput.value.trim();
+        targetIdInput.value = ''; // Clear the input after attempt
+
         if (!targetId || targetId === peer.id) return alert("Please enter a valid, different Peer ID.");
         if (connections[targetId] && connections[targetId].open) return alert("Already connected to this peer!");
 
         const conn = peer.connect(targetId, {
-            metadata: { username: USERNAME } // Pass your username when initiating the connection
+            metadata: { username: USERNAME }
         });
         
         conn.on('open', () => {
@@ -210,7 +201,6 @@ HTML
                 connections[conn.peer] = conn;
                 setupConnectionListeners(conn);
                 
-                // Store the received peer's username
                 conn.username = conn.metadata.username || 'Anonymous';
 
                 alert(`New peer connected: ${conn.username} (${conn.peer})`);
@@ -220,7 +210,6 @@ HTML
     }
 
     function setupConnectionListeners(conn) {
-        // Store the username on the connection object for easier access
         conn.username = conn.metadata ? conn.metadata.username : conn.username || 'Anonymous';
 
         conn.on('data', (data) => {
@@ -235,7 +224,7 @@ HTML
                     chunks: [], 
                     count: data.count, 
                     mime: data.mime,
-                    senderName: senderName, // Use the stored name
+                    senderName: senderName,
                     senderId: conn.peer
                 };
             }
@@ -248,7 +237,7 @@ HTML
         });
     }
     
-    // --- IMAGE CHUNKING AND REASSEMBLY ---
+    // --- IMAGE CHUNKING AND REASSEMBLY (No changes needed) ---
     
     function handleIncomingImageChunk(chunkData, senderName) {
         const imgId = chunkData.id;
@@ -268,7 +257,7 @@ HTML
         }
     }
 
-    // --- SENDING LOGIC ---
+    // --- SENDING LOGIC (No changes needed, the logic already broadcasts) ---
     
     async function sendMessage() {
         const content = document.getElementById('message-input').value.trim();
@@ -327,7 +316,7 @@ HTML
                     id: imgId,
                     count: totalChunks,
                     mime: imgFile.type,
-                    senderName: USERNAME, // Include username in start message
+                    senderName: USERNAME,
                 };
                 sentCount = sendDataToPeers(startData);
                 if (sentCount === 0) return resolve(0);
@@ -342,7 +331,6 @@ HTML
                         index: i,
                         count: totalChunks,
                         data: base64Data.substring(start, end),
-                        // Only include senderName/content for the final chunk for efficiency
                         senderName: (i === totalChunks - 1) ? USERNAME : null, 
                         content: (i === totalChunks - 1) ? content : null 
                     };
@@ -361,4 +349,4 @@ HTML
 </script>
 
 </body>
-</html>
+</html>-
