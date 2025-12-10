@@ -1,33 +1,52 @@
-<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ConnectLink - P2P Social Feed</title>
+    <title>DataChain - P2P Image Social</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        body { font-family: sans-serif; max-width: 700px; margin: 0 auto; padding: 20px; background-color: #f8f8f8; }
-        h1 { color: #5B2C6F; text-align: center; border-bottom: 2px solid #5B2C6F; padding-bottom: 10px; }
-        .info-box { background: #e0f7fa; border: 1px solid #00bcd4; padding: 15px; margin-bottom: 20px; border-radius: 5px; }
-        #my-id-container { text-align: center; margin-bottom: 20px; }
-        #my-peer-id { font-size: 1.2em; font-weight: bold; color: #D50000; }
-        #connection-area input, #connection-area button { padding: 8px; margin: 5px; border-radius: 4px; border: 1px solid #ccc; }
-        #connection-area button { background-color: #4CAF50; color: white; cursor: pointer; border: none; }
+        /* General Styles */
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 800px; margin: 0 auto; padding: 25px; background-color: #f0f2f5; color: #1c1e21; }
+        h1 { color: #5B2C6F; text-align: center; border-bottom: 3px solid #5B2C6F; padding-bottom: 15px; margin-bottom: 20px; font-weight: 700; }
+        .info-box { background: #e7f3ff; border: 1px solid #1877f2; padding: 15px; margin-bottom: 25px; border-radius: 8px; font-size: 0.9em; }
+
+        /* Identity and Connection */
+        #my-id-container { text-align: center; margin-bottom: 30px; }
+        #my-peer-id { font-size: 1.4em; font-weight: bold; color: #D50000; padding: 5px 10px; background: #fff; border-radius: 4px; display: inline-block; word-break: break-all; }
+        #connection-area { display: flex; justify-content: center; margin-bottom: 20px; }
+        #connection-area input { padding: 10px; border-radius: 5px; border: 1px solid #ccc; flex-grow: 1; max-width: 300px; margin-right: 10px; }
+        #connection-area button { background-color: #4CAF50; color: white; padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
         #connection-area button:hover { background-color: #45a049; }
-        #message-input, #send-button { width: 100%; padding: 10px; box-sizing: border-box; margin-bottom: 10px; }
-        #send-button { background-color: #8E44AD; color: white; cursor: pointer; border: none; }
+        #connected-count { margin-left: 20px; align-self: center; font-weight: 600; color: #333; }
+        
+        /* Posting Area */
+        .post-box { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); margin-bottom: 30px; }
+        #message-input { width: 100%; min-height: 70px; padding: 10px; box-sizing: border-box; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 5px; resize: vertical; }
+        #send-button { background-color: #8E44AD; }
         #send-button:hover { background-color: #6C3483; }
+
+        /* File Input */
+        #file-input-container { display: flex; align-items: center; margin-top: 15px; padding: 10px; border: 1px dashed #ccc; border-radius: 5px; background: #f9f9f9; }
+        #file-input { display: none; }
+        .file-label { background-color: #1877f2; color: white; padding: 8px 15px; border-radius: 5px; cursor: pointer; margin-right: 15px; font-weight: bold; }
+        .file-label:hover { background-color: #165be8; }
+
+        /* Feed Display */
         #messages { list-style-type: none; padding: 0; }
-        .message-item { background-color: #fff; padding: 10px; margin-bottom: 8px; border-left: 5px solid #8E44AD; border-radius: 4px; word-wrap: break-word; }
-        .message-sender { font-weight: bold; color: #333; }
-        .message-content { margin-top: 5px; }
+        .message-item { background-color: #fff; padding: 15px; margin-bottom: 15px; border-left: 5px solid #8E44AD; border-radius: 8px; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1); }
+        .message-sender { font-weight: bold; color: #333; font-size: 1.1em; margin-bottom: 8px; }
+        .message-time { font-size: 0.8em; color: #777; float: right; }
+        
+        /* Image Specific Styles */
+        .message-image { max-width: 100%; height: auto; border-radius: 6px; margin-top: 10px; border: 1px solid #eee; }
+        .chunk-status { font-size: 0.9em; color: orange; }
     </style>
 </head>
 <body>
 
-    <h1>ConnectLink P2P Feed</h1>
+    <h1>DataChain P2P Feed 🔗</h1>
     <div class="info-box">
-        This app uses **Peer-to-Peer (P2P)** technology. Posts are sent directly to connected users and are **not** stored permanently. To connect, share your ID and have a friend enter it below!
+        This app uses **P2P** connections. Messages and images are transmitted directly between connected peers. Images are sent in small, reliable chunks!
     </div>
 
     <div id="my-id-container">
@@ -37,98 +56,110 @@
     <div id="connection-area">
         <input type="text" id="target-id" placeholder="Enter Peer ID to Connect">
         <button onclick="connectToPeer()">Connect</button>
-        <div id="connected-count" style="margin-top: 10px;">Connected Peers: 0</div>
+        <div id="connected-count">Connected Peers: 0</div>
     </div>
 
     <hr>
     
-    <h2>Share a Link</h2>
-    <textarea id="message-input" placeholder="Type your link or message here (max 280 chars)" maxlength="280" disabled></textarea>
-    <button id="send-button" onclick="sendMessage()" disabled>Send Link</button>
+    <div class="post-box">
+        <h2>Share a Spark (Text or Picture)</h2>
+        <textarea id="message-input" placeholder="Type your text spark here..." maxlength="280"></textarea>
+        
+        <div id="file-input-container">
+            <label for="file-input" class="file-label">Select Picture</label>
+            <input type="file" id="file-input" accept="image/*">
+            <span id="file-status">No file selected.</span>
+        </div>
+        
+        <button id="send-button" onclick="sendMessage()">Send Spark</button>
+    </div>
 
-    <h2>Received Links</h2>
+    <h2>Received Sparks</h2>
     <ul id="messages"></ul>
 
 <script>
     let peer; 
     let connections = {};
-    const PEER_SERVER_HOST = '0.peerjs.com'; 
+    let file = null; // Store the selected file object
+    let imageChunks = {}; // Storage for incoming image chunks
+    const PEER_SERVER_HOST = '0.peerjs.com';
+    const CHUNK_SIZE = 16 * 1024; // 16KB chunk size
 
     // --- UTILITIES ---
     function updateConnectedCount() {
         document.getElementById('connected-count').innerText = `Connected Peers: ${Object.keys(connections).length}`;
     }
+    
+    // Handles reading the selected file when the user chooses one
+    document.getElementById('file-input').addEventListener('change', (e) => {
+        file = e.target.files[0];
+        const statusEl = document.getElementById('file-status');
+        if (file) {
+            statusEl.innerText = `${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB) selected.`;
+        } else {
+            statusEl.innerText = 'No file selected.';
+        }
+    });
 
-    function displayMessage(senderId, content) {
+    // Renders the final post item to the feed
+    function displayMessage(senderId, content, imageDataUrl = null) {
         const messagesUl = document.getElementById('messages');
         const li = document.createElement('li');
         li.className = 'message-item';
         
         const timestamp = new Date().toLocaleTimeString();
         
-        li.innerHTML = `
-            <div class="message-sender">From ${senderId} at ${timestamp}:</div>
-            <div class="message-content">${content}</div>
-        `;
+        let contentHtml = `<div class="message-sender">${senderId} <span class="message-time">${timestamp}</span></div>`;
+
+        if (imageDataUrl) {
+            // Display image if it exists
+            contentHtml += `<img src="${imageDataUrl}" class="message-image" alt="P2P Image">`;
+        }
+        if (content) {
+            // Display text content
+            contentHtml += `<div class="message-content">${content}</div>`;
+        }
+        
+        li.innerHTML = contentHtml;
         messagesUl.prepend(li);
     }
 
-    // --- P2P CONNECTION LOGIC ---
+    // --- P2P CONNECTION LOGIC (Identical to previous fix) ---
 
     function initializePeer() {
-        peer = new Peer({
-            host: PEER_SERVER_HOST,
-            secure: true, 
-            port: 443
-        });
+        peer = new Peer({ host: PEER_SERVER_HOST, secure: true, port: 443 });
 
-        // 1. Peer ID is ready
         peer.on('open', (id) => {
             document.getElementById('my-peer-id').innerText = id;
-            console.log('My P2P ID is:', id);
-            
             document.getElementById('message-input').disabled = false;
             document.getElementById('send-button').disabled = false;
-
-            // 2. Listen for connection requests from other peers
             peer.on('connection', handleIncomingConnection);
         });
-
-        // 3. Handle errors
         peer.on('error', (err) => {
             console.error('PeerJS Error:', err);
             document.getElementById('my-peer-id').innerText = 'ERROR: Check console.';
         });
     }
     
-    // Function to manually connect to another peer (User A's action)
     function connectToPeer() {
         const targetId = document.getElementById('target-id').value.trim();
         if (!targetId || targetId === peer.id) return alert("Please enter a valid, different Peer ID.");
-        
         if (connections[targetId] && connections[targetId].open) return alert("Already connected to this peer!");
 
         const conn = peer.connect(targetId);
-        
         conn.on('open', () => {
-            // Store the connection object immediately for sending data
             connections[targetId] = conn; 
             setupConnectionListeners(conn);
             alert(`Successfully connected to peer: ${targetId}!`);
             updateConnectedCount();
         });
-        
         conn.on('error', (err) => console.error(`Connection failed for ${targetId}:`, err));
     }
 
-    // Function to handle connection established by an incoming request (User B's action)
     function handleIncomingConnection(conn) {
-        // 🚨 FIX HERE: This ensures User B sets up listeners and stores the connection object.
-        // The sender needs a handler for 'open', the receiver needs a handler for 'data'.
-        
         conn.on('open', () => {
             if (!connections[conn.peer] || !connections[conn.peer].open) {
-                connections[conn.peer] = conn; // Store the incoming connection for sending data back
+                connections[conn.peer] = conn;
                 setupConnectionListeners(conn);
                 alert(`New peer connected: ${conn.peer}`);
                 updateConnectedCount();
@@ -136,61 +167,153 @@
         });
     }
 
-    // Sets up listeners for receiving data and closing connections
     function setupConnectionListeners(conn) {
-        // Data listener (Receiving)
+        // Data listener is the primary receive function
         conn.on('data', (data) => {
-            if (data.sender && data.content) {
+            if (data.type === 'message') {
                 displayMessage(data.sender, data.content);
-                console.log(`Received data from ${data.sender}: ${data.content}`);
-            } else {
-                console.warn('Received malformed data:', data);
+            } else if (data.type === 'image_chunk') {
+                handleIncomingImageChunk(data);
+            } else if (data.type === 'image_start') {
+                // Initialize chunk storage for a new image transmission
+                imageChunks[data.id] = { 
+                    chunks: [], 
+                    count: data.count, 
+                    mime: data.mime,
+                    sender: conn.peer 
+                };
             }
         });
         
-        // Disconnect listener
         conn.on('close', () => {
             delete connections[conn.peer];
             displayMessage('SYSTEM', `Peer ${conn.peer} disconnected.`);
             updateConnectedCount();
         });
     }
+    
+    // --- IMAGE CHUNKING AND REASSEMBLY ---
+    
+    function handleIncomingImageChunk(chunkData) {
+        const imgId = chunkData.id;
+        const storage = imageChunks[imgId];
+
+        if (!storage) {
+            console.warn(`Received chunk for unknown image ID: ${imgId}`);
+            return;
+        }
+
+        storage.chunks[chunkData.index] = chunkData.data;
+        
+        // Check if all chunks have arrived
+        if (storage.chunks.filter(c => c).length === storage.count) {
+            // Reassemble the image from Base64 chunks
+            const base64String = storage.chunks.join('');
+            const dataUrl = `data:${storage.mime};base64,${base64String}`;
+            
+            // Display the complete post
+            displayMessage(storage.sender, chunkData.content, dataUrl);
+            
+            // Clean up storage
+            delete imageChunks[imgId];
+        }
+    }
 
     // --- SENDING LOGIC ---
 
-    function sendMessage() {
-        const input = document.getElementById('message-input');
-        const content = input.value.trim();
-        if (!content) return;
-        
-        const messageData = { 
-            sender: peer.id, 
-            content: content
-        };
+    // Primary function to send either text or an image
+    async function sendMessage() {
+        const content = document.getElementById('message-input').value.trim();
+        const imgFile = file;
 
-        let sentCount = 0;
-        let wasSent = false;
-        
-        // Loop through all active data connections
-        for (const peerId in connections) {
-            const conn = connections[peerId];
-            // Check if the connection is open and ready to transmit
-            if (conn && conn.open) { 
-                conn.send(messageData);
-                sentCount++;
-                wasSent = true;
-                console.log(`Sending message to ${peerId}`);
-            }
+        if (!content && !imgFile) {
+            alert("Please enter a message or select a picture.");
+            return;
         }
         
-        if (wasSent) {
-            // Display the message locally immediately after sending
-            displayMessage('YOU', content);
-            input.value = ''; // Clear input
-            console.log(`Echo sent to ${sentCount} peers.`);
+        let sentCount = 0;
+        let successfulSend = false;
+
+        if (imgFile) {
+            // 1. Send Picture (using chunks)
+            sentCount = await sendFileInChunks(imgFile, content);
+        } else {
+            // 2. Send Text Message
+            const messageData = { type: 'message', sender: peer.id, content: content };
+            sentCount = sendDataToPeers(messageData);
+        }
+        
+        if (sentCount > 0) {
+            // Display locally
+            const imageDataUrl = imgFile ? URL.createObjectURL(imgFile) : null;
+            displayMessage('YOU', content, imageDataUrl);
+            
+            // Reset input fields
+            document.getElementById('message-input').value = '';
+            document.getElementById('file-input').value = '';
+            document.getElementById('file-status').innerText = 'No file selected.';
+            file = null;
+
         } else {
             alert("No open connections found! Please connect to a peer first.");
         }
+    }
+    
+    // Generic function to send data payload to all connected peers
+    function sendDataToPeers(data) {
+        let count = 0;
+        for (const peerId in connections) {
+            const conn = connections[peerId];
+            if (conn && conn.open) { 
+                conn.send(data);
+                count++;
+            }
+        }
+        return count;
+    }
+
+    // Function to read the file and transmit it in chunks
+    function sendFileInChunks(imgFile, content) {
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                // Convert file data to Base64 string
+                const base64Data = evt.target.result.split(',')[1];
+                const totalChunks = Math.ceil(base64Data.length / CHUNK_SIZE);
+                const imgId = peer.id + Date.now();
+                let sentCount = 0;
+
+                // 1. Send START signal
+                const startData = {
+                    type: 'image_start',
+                    id: imgId,
+                    count: totalChunks,
+                    mime: imgFile.type,
+                };
+                sentCount = sendDataToPeers(startData);
+                if (sentCount === 0) return resolve(0);
+
+                // 2. Send all CHUNKS
+                for (let i = 0; i < totalChunks; i++) {
+                    const start = i * CHUNK_SIZE;
+                    const end = Math.min((i + 1) * CHUNK_SIZE, base64Data.length);
+                    
+                    const chunkData = {
+                        type: 'image_chunk',
+                        id: imgId,
+                        index: i,
+                        count: totalChunks,
+                        data: base64Data.substring(start, end),
+                        sender: peer.id,
+                        content: (i === totalChunks - 1) ? content : null // Include text content only with the last chunk
+                    };
+                    sendDataToPeers(chunkData);
+                }
+                
+                resolve(sentCount);
+            };
+            reader.readAsDataURL(imgFile);
+        });
     }
 
     // Start the app when the page loads
