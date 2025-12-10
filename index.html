@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DataChain - P2P Group Chat</title>
+    <title>DataChain - P2P Automated Group Join</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         /* General Styles */
@@ -51,9 +51,9 @@
 </head>
 <body>
 
-    <h1>DataChain P2P Group Chat 🌐</h1>
+    <h1>DataChain P2P Automated Group Join 🤝</h1>
     <div class="info-box">
-        This is a decentralized group chat. Connect to multiple friends by entering each of their Peer IDs individually. Every post (text or image) is broadcast directly to all connected peers.
+        To form a group, one person connects to another. The app then automatically shares the IDs of all other connected members, allowing new members to join the whole group instantly!
     </div>
 
     <div id="username-section">
@@ -70,7 +70,7 @@
     <div id="connection-area">
         <div class="connect-control">
             <input type="text" id="target-id" placeholder="Enter Peer ID to Connect">
-            <button onclick="connectToPeer()">Connect to Group</button>
+            <button onclick="connectToPeer()">Join Group via Peer</button>
         </div>
         <div id="connected-count">Connected Peers: 0</div>
     </div>
@@ -173,11 +173,10 @@
         });
     }
     
-    // Connect to a new peer for the group chat
     function connectToPeer() {
         const targetIdInput = document.getElementById('target-id');
         const targetId = targetIdInput.value.trim();
-        targetIdInput.value = ''; // Clear the input after attempt
+        targetIdInput.value = '';
 
         if (!targetId || targetId === peer.id) return alert("Please enter a valid, different Peer ID.");
         if (connections[targetId] && connections[targetId].open) return alert("Already connected to this peer!");
@@ -189,8 +188,11 @@
         conn.on('open', () => {
             connections[targetId] = conn; 
             setupConnectionListeners(conn);
-            alert(`Successfully connected to peer: ${targetId}!`);
+            alert(`Successfully connected to peer: ${targetId}! Now exchanging group IDs.`);
             updateConnectedCount();
+            
+            // 🚨 NEW: When a new peer joins, the initiator immediately sends the list of their connected peers.
+            sendGroupIDs(targetId);
         });
         conn.on('error', (err) => console.error(`Connection failed for ${targetId}:`, err));
     }
@@ -205,6 +207,9 @@
 
                 alert(`New peer connected: ${conn.username} (${conn.peer})`);
                 updateConnectedCount();
+                
+                // 🚨 NEW: When a peer accepts a connection, they also send their current group IDs back.
+                sendGroupIDs(conn.peer);
             }
         });
     }
@@ -227,6 +232,9 @@
                     senderName: senderName,
                     senderId: conn.peer
                 };
+            } else if (data.type === 'group_id_broadcast') {
+                // 🚨 NEW: Automatically connect to new peers in the list
+                handleGroupIDBroadcast(data.ids);
             }
         });
         
@@ -237,27 +245,59 @@
         });
     }
     
-    // --- IMAGE CHUNKING AND REASSEMBLY (No changes needed) ---
+    // 🚨 NEW FUNCTION: Sends the list of all peers I am currently connected to.
+    function sendGroupIDs(targetPeerId) {
+        // Get all peer IDs currently connected, excluding the target and myself
+        const groupIDs = Object.keys(connections).filter(id => id !== targetPeerId && id !== peer.id);
+
+        if (groupIDs.length > 0) {
+            const broadcastData = {
+                type: 'group_id_broadcast',
+                ids: groupIDs
+            };
+            // Send the list ONLY to the newly connected peer
+            if (connections[targetPeerId] && connections[targetPeerId].open) {
+                 connections[targetPeerId].send(broadcastData);
+                 console.log(`Sent group IDs to ${targetPeerId}:`, groupIDs);
+            }
+        }
+    }
+    
+    // 🚨 NEW FUNCTION: Automatically connects to new IDs received in the group broadcast.
+    function handleGroupIDBroadcast(receivedIDs) {
+        receivedIDs.forEach(newId => {
+            if (newId !== peer.id && !connections[newId]) {
+                console.log(`Attempting automated connection to new peer: ${newId}`);
+                // Use connectToPeer logic but without user input/alert for automation
+                const conn = peer.connect(newId, { metadata: { username: USERNAME } });
+                
+                conn.on('open', () => {
+                    connections[newId] = conn; 
+                    setupConnectionListeners(conn);
+                    console.log(`Auto-connected to ${newId}.`);
+                    updateConnectedCount();
+                });
+                conn.on('error', (err) => console.error(`Auto-connection failed for ${newId}:`, err));
+            }
+        });
+    }
+
+    // --- IMAGE CHUNKING AND REASSEMBLY (No changes) ---
     
     function handleIncomingImageChunk(chunkData, senderName) {
         const imgId = chunkData.id;
         const storage = imageChunks[imgId];
-
         if (!storage) return;
-
         storage.chunks[chunkData.index] = chunkData.data;
-        
         if (storage.chunks.filter(c => c).length === storage.count) {
             const base64String = storage.chunks.join('');
             const dataUrl = `data:${storage.mime};base64,${base64String}`;
-            
             displayMessage(senderName, chunkData.content, dataUrl);
-            
             delete imageChunks[imgId];
         }
     }
 
-    // --- SENDING LOGIC (No changes needed, the logic already broadcasts) ---
+    // --- SENDING LOGIC (No changes needed, broadcasts to all 'connections') ---
     
     async function sendMessage() {
         const content = document.getElementById('message-input').value.trim();
@@ -349,4 +389,4 @@
 </script>
 
 </body>
-</html>-
+</html>
