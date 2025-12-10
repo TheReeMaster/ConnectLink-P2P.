@@ -104,13 +104,11 @@
     const PEER_SERVER_PORT = 443;
     const PEER_SERVER_SECURE = true; 
 
-    // 🚨 NEW: STUN/TURN configuration for reliable P2P connection across networks
+    // STUN/TURN configuration for reliable P2P connection across networks
     const ICE_SERVERS = [
-        // Google's public STUN servers for excellent reliability
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
         { urls: 'stun:stun2.l.google.com:19302' },
-        // Fallback for better compatibility
         { urls: 'stun:global.stun.twilio.com:3478' }
     ];
     
@@ -174,7 +172,6 @@
     // --- P2P CONNECTION LOGIC ---
 
     function initializePeer() {
-        // 🚨 FINAL FIX: Passing the full configuration with STUN servers
         peer = new Peer({ 
             host: PEER_SERVER_HOST, 
             port: PEER_SERVER_PORT,
@@ -204,8 +201,10 @@
         if (!targetId || targetId === peer.id) return alert("Please enter a valid, different Peer ID.");
         if (connections[targetId] && connections[targetId].open) return alert("Already connected to this peer!");
 
+        // 🚨 FINAL FIX APPLIED HERE: Force connection to be reliable
         const conn = peer.connect(targetId, {
-            metadata: { username: USERNAME }
+            metadata: { username: USERNAME },
+            reliable: true // Ensures maximum connection persistence
         });
         
         conn.on('open', () => {
@@ -216,10 +215,17 @@
             
             sendGroupIDs(targetId);
         });
+        // Catch the explicit close error if the connection times out after trying STUN/TURN
+        conn.on('close', () => {
+             // If a connection fails before open, it often triggers a close event
+             console.error(`Connection attempt to ${targetId} failed or timed out.`);
+             delete connections[targetId];
+        });
         conn.on('error', (err) => console.error(`Connection failed for ${targetId}:`, err));
     }
 
     function handleIncomingConnection(conn) {
+        // NOTE: Incoming connections already default to reliable if the initiator requested it.
         conn.on('open', () => {
             if (!connections[conn.peer] || !connections[conn.peer].open) {
                 connections[conn.peer] = conn;
@@ -284,8 +290,12 @@
         receivedIDs.forEach(newId => {
             if (newId !== peer.id && !connections[newId]) {
                 console.log(`Attempting automated connection to new peer: ${newId}`);
-                // Use the same robust connection settings for automated connections
-                const conn = peer.connect(newId, { metadata: { username: USERNAME } });
+                
+                // 🚨 FINAL FIX APPLIED HERE: Ensure auto-connects are also reliable
+                const conn = peer.connect(newId, { 
+                    metadata: { username: USERNAME },
+                    reliable: true 
+                });
                 
                 conn.on('open', () => {
                     connections[newId] = conn; 
@@ -294,6 +304,10 @@
                     updateConnectedCount();
                 });
                 conn.on('error', (err) => console.error(`Auto-connection failed for ${newId}:`, err));
+                conn.on('close', () => {
+                    console.error(`Auto-connection attempt to ${newId} failed or timed out.`);
+                    delete connections[newId];
+                });
             }
         });
     }
