@@ -106,10 +106,18 @@
 
     // STUN/TURN configuration for reliable P2P connection across networks
     const ICE_SERVERS = [
+        // STUN servers (primary attempt for direct connection)
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
         { urls: 'stun:stun2.l.google.com:19302' },
-        { urls: 'stun:global.stun.twilio.com:3478' }
+        { urls: 'stun:global.stun.twilio.com:3478' },
+        
+        // TURN Server (fallback relay for restrictive networks)
+        { 
+            urls: "turn:global.turn.twilio.com:3478?transport=tcp", 
+            username: "API_KEY", 
+            credential: "API_SECRET" 
+        }
     ];
     
     const CHUNK_SIZE = 16 * 1024;
@@ -201,10 +209,9 @@
         if (!targetId || targetId === peer.id) return alert("Please enter a valid, different Peer ID.");
         if (connections[targetId] && connections[targetId].open) return alert("Already connected to this peer!");
 
-        // 🚨 FINAL FIX APPLIED HERE: Force connection to be reliable
         const conn = peer.connect(targetId, {
             metadata: { username: USERNAME },
-            reliable: true // Ensures maximum connection persistence
+            reliable: true 
         });
         
         conn.on('open', () => {
@@ -213,19 +220,17 @@
             alert(`Successfully connected to peer: ${targetId}! Now exchanging group IDs.`);
             updateConnectedCount();
             
+            // Send IDs only after a successful connection is opened
             sendGroupIDs(targetId);
         });
-        // Catch the explicit close error if the connection times out after trying STUN/TURN
         conn.on('close', () => {
-             // If a connection fails before open, it often triggers a close event
              console.error(`Connection attempt to ${targetId} failed or timed out.`);
-             delete connections[targetId];
+             // The main connection should not be deleted yet, as the error might be temporary
         });
         conn.on('error', (err) => console.error(`Connection failed for ${targetId}:`, err));
     }
 
     function handleIncomingConnection(conn) {
-        // NOTE: Incoming connections already default to reliable if the initiator requested it.
         conn.on('open', () => {
             if (!connections[conn.peer] || !connections[conn.peer].open) {
                 connections[conn.peer] = conn;
@@ -236,6 +241,7 @@
                 alert(`New peer connected: ${conn.username} (${conn.peer})`);
                 updateConnectedCount();
                 
+                // Send IDs only after a successful connection is opened
                 sendGroupIDs(conn.peer);
             }
         });
@@ -260,6 +266,7 @@
                     senderId: conn.peer
                 };
             } else if (data.type === 'group_id_broadcast') {
+                // Execute the new sequenced auto-connect logic
                 handleGroupIDBroadcast(data.ids);
             }
         });
@@ -272,6 +279,7 @@
     }
     
     function sendGroupIDs(targetPeerId) {
+        // Only broadcast the IDs of peers *already* in my group
         const groupIDs = Object.keys(connections).filter(id => id !== targetPeerId && id !== peer.id);
 
         if (groupIDs.length > 0) {
@@ -286,30 +294,63 @@
         }
     }
     
+    // 🚀 NEW: Sequenced connection attempt using recursion and a delay
     function handleGroupIDBroadcast(receivedIDs) {
-        receivedIDs.forEach(newId => {
-            if (newId !== peer.id && !connections[newId]) {
-                console.log(`Attempting automated connection to new peer: ${newId}`);
-                
-                // 🚨 FINAL FIX APPLIED HERE: Ensure auto-connects are also reliable
-                const conn = peer.connect(newId, { 
-                    metadata: { username: USERNAME },
-                    reliable: true 
-                });
-                
-                conn.on('open', () => {
-                    connections[newId] = conn; 
-                    setupConnectionListeners(conn);
-                    console.log(`Auto-connected to ${newId}.`);
-                    updateConnectedCount();
-                });
-                conn.on('error', (err) => console.error(`Auto-connection failed for ${newId}:`, err));
-                conn.on('close', () => {
-                    console.error(`Auto-connection attempt to ${newId} failed or timed out.`);
-                    delete connections[newId];
-                });
+        // Filter out IDs we are already connected to
+        const newIDs = receivedIDs.filter(id => id !== peer.id && !connections[id]);
+        
+        if (newIDs.length === 0) return;
+
+        // Use a recursive function to process IDs one by one
+        function connectNextPeer(index) {
+            if (index >= newIDs.length) {
+                console.log("Finished group auto-connection sequence.");
+                return;
             }
-        });
+
+            const newId = newIDs[index];
+            console.log(`[${index + 1}/${newIDs.length}] Attempting sequenced auto-connect to: ${newId}`);
+            
+            const conn = peer.connect(newId, { 
+                metadata: { username: USERNAME },
+                reliable: true 
+            });
+            
+            conn.on('open', () => {
+                connections[newId] = conn; 
+                setupConnectionListeners(conn);
+                console.log(`Auto-connected to ${newId}.`);
+                updateConnectedCount();
+                
+                // Move to the next peer immediately on success
+                connectNextPeer(index + 1);
+            });
+            
+            conn.on('error', (err) => {
+                console.error(`Auto-connection failed for ${newId}:`, err);
+                // Move to the next peer after error
+                connectNextPeer(index + 1);
+            });
+
+            conn.on('close', () => {
+                // If it closes after failing to open, move on to the next one after a timeout
+                setTimeout(() => connectNextPeer(index + 1), 2000); // Give it a 2 second timeout 
+                delete connections[newId];
+            });
+
+            // Set a generous timeout for the initial opening attempt
+            setTimeout(() => {
+                 if (!connections[newId] || !connections[newId].open) {
+                     console.log(`Connection attempt to ${newId} timed out. Moving to next peer.`);
+                     // The connection might still be resolving, but we move on to avoid blocking the queue.
+                     // The 'close' event handler above will also clean up if it finally fails.
+                     if (!connections[newId]) connectNextPeer(index + 1); // Only advance if connection wasn't established
+                 }
+            }, 10000); // 10 second timeout per peer to allow TURN connection
+        }
+
+        // Start the sequence with a small initial delay to let the main connection settle
+        setTimeout(() => connectNextPeer(0), 1000); 
     }
 
     // --- IMAGE CHUNKING AND REASSEMBLY (No changes) ---
