@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DataChain - P2P Automated Group Join</title>
+    <title>DataChain - Working P2P Chat</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         /* General Styles */
@@ -19,7 +19,6 @@
         .connect-control input { padding: 10px; border-radius: 5px; border: 1px solid #ccc; flex-grow: 1; margin-right: 10px; }
         .connect-control button { background-color: #4CAF50; color: white; padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
         .connect-control button:hover { background-color: #45a049; }
-        #connected-count { margin-top: 10px; font-weight: 600; color: #333; }
         
         /* Username Specific Section */
         #username-section { background-color: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1); margin-bottom: 20px; text-align: center;}
@@ -33,32 +32,24 @@
         #send-button { background-color: #8E44AD; }
         #send-button:hover { background-color: #6C3483; }
 
-        /* File Input */
-        #file-input-container { display: flex; align-items: center; margin-top: 15px; padding: 10px; border: 1px dashed #ccc; border-radius: 5px; background: #f9f9f9; }
-        #file-input { display: none; }
-        .file-label { background-color: #1877f2; color: white; padding: 8px 15px; border-radius: 5px; cursor: pointer; margin-right: 15px; font-weight: bold; }
-        .file-label:hover { background-color: #165be8; }
-
         /* Feed Display */
         #messages { list-style-type: none; padding: 0; }
         .message-item { background-color: #fff; padding: 15px; margin-bottom: 15px; border-left: 5px solid #8E44AD; border-radius: 8px; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1); }
         .message-sender { font-weight: bold; color: #333; font-size: 1.1em; margin-bottom: 8px; }
         .message-time { font-size: 0.8em; color: #777; float: right; }
         
-        /* Image Specific Styles */
-        .message-image { max-width: 100%; height: auto; border-radius: 6px; margin-top: 10px; border: 1px solid #eee; }
     </style>
 </head>
 <body>
 
-    <h1>DataChain P2P Automated Group Join 🤝</h1>
+    <h1>DataChain P2P Chat (Working Base) 🤝</h1>
     <div class="info-box">
-        To form a group, one person connects to another. The app then automatically shares the IDs of all other connected members, allowing new members to join the whole group instantly!
+        This version is stripped down to the reliable two-person cross-network connection, which you confirmed worked previously.
     </div>
 
     <div id="username-section">
         <label for="username-input">Set Your Username:</label>
-        <input type="text" id="username-input" placeholder="e.g., GroupLeader" maxlength="20">
+        <input type="text" id="username-input" placeholder="e.g., UserOne" maxlength="20">
         <button id="save-username-button" onclick="saveUsername()">Save</button>
         <p>Current User: <span id="username-display"></span></p>
     </div>
@@ -70,57 +61,25 @@
     <div id="connection-area">
         <div class="connect-control">
             <input type="text" id="target-id" placeholder="Enter Peer ID to Connect">
-            <button onclick="connectToPeer()">Join Group via Peer</button>
+            <button onclick="connectToPeer()">Connect to Peer</button>
         </div>
-        <div id="connected-count">Connected Peers: 0</div>
+        <div id="connected-status">Status: Not Connected</div>
     </div>
 
     <hr>
     
     <div class="post-box">
-        <h2>Broadcast a Spark (Text or Picture)</h2>
-        <textarea id="message-input" placeholder="Type your group message here..." maxlength="280"></textarea>
-        
-        <div id="file-input-container">
-            <label for="file-input" class="file-label">Select Picture</label>
-            <input type="file" id="file-input" accept="image/*">
-            <span id="file-status">No file selected.</span>
-        </div>
-        
-        <button id="send-button" onclick="sendMessage()">Send Spark to Group</button>
+        <h2>Send a Message</h2>
+        <textarea id="message-input" placeholder="Type your message here..." maxlength="280"></textarea>
+        <button id="send-button" onclick="sendMessage()">Send Message</button>
     </div>
 
-    <h2>Group Feed</h2>
+    <h2>Chat Feed</h2>
     <ul id="messages"></ul>
 
 <script>
     let peer; 
-    let connections = {};
-    let file = null;
-    let imageChunks = {}; 
-    
-    // PeerJS Signaling Server Config
-    const PEER_SERVER_HOST = '0.peerjs.com'; 
-    const PEER_SERVER_PORT = 443;
-    const PEER_SERVER_SECURE = true; 
-
-    // STUN/TURN configuration for reliable P2P connection across networks
-    const ICE_SERVERS = [
-        // STUN servers (primary attempt for direct connection)
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' },
-        { urls: 'stun:global.stun.twilio.com:3478' },
-        
-        // TURN Server (fallback relay for restrictive networks)
-        { 
-            urls: "turn:global.turn.twilio.com:3478?transport=tcp", 
-            username: "API_KEY", 
-            credential: "API_SECRET" 
-        }
-    ];
-    
-    const CHUNK_SIZE = 16 * 1024;
+    let conn = null; // Single connection object for 2-person chat
     
     // --- USERNAME LOGIC ---
     let USERNAME = localStorage.getItem('datachain_username') || 'Anonymous';
@@ -143,21 +102,11 @@
     }
     
     // --- UTILITIES ---
-    function updateConnectedCount() {
-        document.getElementById('connected-count').innerText = `Connected Peers: ${Object.keys(connections).length}`;
+    function updateConnectionStatus(status) {
+        document.getElementById('connected-status').innerText = `Status: ${status}`;
     }
-    
-    document.getElementById('file-input').addEventListener('change', (e) => {
-        file = e.target.files[0];
-        const statusEl = document.getElementById('file-status');
-        if (file) {
-            statusEl.innerText = `${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB) selected.`;
-        } else {
-            statusEl.innerText = 'No file selected.';
-        }
-    });
 
-    function displayMessage(senderName, content, imageDataUrl = null) {
+    function displayMessage(senderName, content) {
         const messagesUl = document.getElementById('messages');
         const li = document.createElement('li');
         li.className = 'message-item';
@@ -165,13 +114,7 @@
         const timestamp = new Date().toLocaleTimeString();
         
         let contentHtml = `<div class="message-sender">${senderName} <span class="message-time">${timestamp}</span></div>`;
-
-        if (imageDataUrl) {
-            contentHtml += `<img src="${imageDataUrl}" class="message-image" alt="P2P Image">`;
-        }
-        if (content) {
-            contentHtml += `<div class="message-content">${content}</div>`;
-        }
+        contentHtml += `<div class="message-content">${content}</div>`;
         
         li.innerHTML = contentHtml;
         messagesUl.prepend(li);
@@ -180,278 +123,100 @@
     // --- P2P CONNECTION LOGIC ---
 
     function initializePeer() {
-        peer = new Peer({ 
-            host: PEER_SERVER_HOST, 
-            port: PEER_SERVER_PORT,
-            secure: PEER_SERVER_SECURE,
-            config: {
-                'iceServers': ICE_SERVERS
-            }
-        });
+        // Simple initialization, letting PeerJS use its default cloud server and its default STUN servers
+        peer = new Peer({ debug: 2 }); 
 
         peer.on('open', (id) => {
             document.getElementById('my-peer-id').innerText = id;
-            document.getElementById('message-input').disabled = false;
-            document.getElementById('send-button').disabled = false;
+            updateConnectionStatus("Waiting for connection...");
             peer.on('connection', handleIncomingConnection);
         });
         peer.on('error', (err) => {
             console.error('PeerJS Error:', err);
             document.getElementById('my-peer-id').innerText = `ERROR: Check console (${err.type}).`;
+            updateConnectionStatus("Error generating ID!");
         });
     }
     
     function connectToPeer() {
-        const targetIdInput = document.getElementById('target-id');
-        const targetId = targetIdInput.value.trim();
-        targetIdInput.value = '';
+        const targetId = document.getElementById('target-id').value.trim();
 
         if (!targetId || targetId === peer.id) return alert("Please enter a valid, different Peer ID.");
-        if (connections[targetId] && connections[targetId].open) return alert("Already connected to this peer!");
+        if (conn && conn.open) return alert("Already connected to a peer!");
 
-        const conn = peer.connect(targetId, {
+        conn = peer.connect(targetId, {
             metadata: { username: USERNAME },
-            reliable: true 
+            reliable: true // Re-adding the reliability flag for connection stability
         });
         
-        conn.on('open', () => {
-            connections[targetId] = conn; 
-            setupConnectionListeners(conn);
-            alert(`Successfully connected to peer: ${targetId}! Now exchanging group IDs.`);
-            updateConnectedCount();
-            
-            // Send IDs only after a successful connection is opened
-            sendGroupIDs(targetId);
-        });
-        conn.on('close', () => {
-             console.error(`Connection attempt to ${targetId} failed or timed out.`);
-             // The main connection should not be deleted yet, as the error might be temporary
-        });
-        conn.on('error', (err) => console.error(`Connection failed for ${targetId}:`, err));
+        setupConnectionListeners(conn);
     }
 
-    function handleIncomingConnection(conn) {
-        conn.on('open', () => {
-            if (!connections[conn.peer] || !connections[conn.peer].open) {
-                connections[conn.peer] = conn;
-                setupConnectionListeners(conn);
-                
-                conn.username = conn.metadata.username || 'Anonymous';
-
-                alert(`New peer connected: ${conn.username} (${conn.peer})`);
-                updateConnectedCount();
-                
-                // Send IDs only after a successful connection is opened
-                sendGroupIDs(conn.peer);
-            }
-        });
+    function handleIncomingConnection(incomingConn) {
+        if (conn && conn.open) {
+            // Reject new connection if one is already open
+            incomingConn.close();
+            return;
+        }
+        conn = incomingConn;
+        setupConnectionListeners(conn);
     }
 
-    function setupConnectionListeners(conn) {
-        conn.username = conn.metadata ? conn.metadata.username : conn.username || 'Anonymous';
-
-        conn.on('data', (data) => {
-            const senderName = data.senderName || conn.username;
-
+    function setupConnectionListeners(connection) {
+        updateConnectionStatus("Connecting...");
+        connection.on('open', () => {
+            connection.username = connection.metadata.username || 'Anonymous';
+            updateConnectionStatus(`Connected to ${connection.username} (${connection.peer})`);
+            displayMessage('SYSTEM', `Successfully connected to ${connection.username}. Start chatting!`);
+        });
+        
+        connection.on('data', (data) => {
+            const senderName = data.senderName || connection.username;
             if (data.type === 'message') {
                 displayMessage(senderName, data.content);
-            } else if (data.type === 'image_chunk') {
-                handleIncomingImageChunk(data, senderName);
-            } else if (data.type === 'image_start') {
-                imageChunks[data.id] = { 
-                    chunks: [], 
-                    count: data.count, 
-                    mime: data.mime,
-                    senderName: senderName,
-                    senderId: conn.peer
-                };
-            } else if (data.type === 'group_id_broadcast') {
-                // Execute the new sequenced auto-connect logic
-                handleGroupIDBroadcast(data.ids);
             }
         });
         
-        conn.on('close', () => {
-            delete connections[conn.peer];
-            displayMessage('SYSTEM', `Peer ${conn.username || conn.peer} disconnected.`);
-            updateConnectedCount();
+        connection.on('close', () => {
+            updateConnectionStatus("Disconnected");
+            displayMessage('SYSTEM', `Peer ${connection.username || connection.peer} disconnected.`);
+            conn = null;
+        });
+
+        connection.on('error', (err) => {
+            console.error('Connection Error:', err);
+            updateConnectionStatus("Connection Error");
+            // If there's an error, we should close the connection attempt
+            if (conn === connection) conn = null; 
         });
     }
     
-    function sendGroupIDs(targetPeerId) {
-        // Only broadcast the IDs of peers *already* in my group
-        const groupIDs = Object.keys(connections).filter(id => id !== targetPeerId && id !== peer.id);
-
-        if (groupIDs.length > 0) {
-            const broadcastData = {
-                type: 'group_id_broadcast',
-                ids: groupIDs
-            };
-            if (connections[targetPeerId] && connections[targetPeerId].open) {
-                 connections[targetPeerId].send(broadcastData);
-                 console.log(`Sent group IDs to ${targetPeerId}:`, groupIDs);
-            }
-        }
-    }
+    // --- SENDING LOGIC ---
     
-    // 🚀 NEW: Sequenced connection attempt using recursion and a delay
-    function handleGroupIDBroadcast(receivedIDs) {
-        // Filter out IDs we are already connected to
-        const newIDs = receivedIDs.filter(id => id !== peer.id && !connections[id]);
-        
-        if (newIDs.length === 0) return;
-
-        // Use a recursive function to process IDs one by one
-        function connectNextPeer(index) {
-            if (index >= newIDs.length) {
-                console.log("Finished group auto-connection sequence.");
-                return;
-            }
-
-            const newId = newIDs[index];
-            console.log(`[${index + 1}/${newIDs.length}] Attempting sequenced auto-connect to: ${newId}`);
-            
-            const conn = peer.connect(newId, { 
-                metadata: { username: USERNAME },
-                reliable: true 
-            });
-            
-            conn.on('open', () => {
-                connections[newId] = conn; 
-                setupConnectionListeners(conn);
-                console.log(`Auto-connected to ${newId}.`);
-                updateConnectedCount();
-                
-                // Move to the next peer immediately on success
-                connectNextPeer(index + 1);
-            });
-            
-            conn.on('error', (err) => {
-                console.error(`Auto-connection failed for ${newId}:`, err);
-                // Move to the next peer after error
-                connectNextPeer(index + 1);
-            });
-
-            conn.on('close', () => {
-                // If it closes after failing to open, move on to the next one after a timeout
-                setTimeout(() => connectNextPeer(index + 1), 2000); // Give it a 2 second timeout 
-                delete connections[newId];
-            });
-
-            // Set a generous timeout for the initial opening attempt
-            setTimeout(() => {
-                 if (!connections[newId] || !connections[newId].open) {
-                     console.log(`Connection attempt to ${newId} timed out. Moving to next peer.`);
-                     // The connection might still be resolving, but we move on to avoid blocking the queue.
-                     // The 'close' event handler above will also clean up if it finally fails.
-                     if (!connections[newId]) connectNextPeer(index + 1); // Only advance if connection wasn't established
-                 }
-            }, 10000); // 10 second timeout per peer to allow TURN connection
-        }
-
-        // Start the sequence with a small initial delay to let the main connection settle
-        setTimeout(() => connectNextPeer(0), 1000); 
-    }
-
-    // --- IMAGE CHUNKING AND REASSEMBLY (No changes) ---
-    
-    function handleIncomingImageChunk(chunkData, senderName) {
-        const imgId = chunkData.id;
-        const storage = imageChunks[imgId];
-        if (!storage) return;
-        storage.chunks[chunkData.index] = chunkData.data;
-        if (storage.chunks.filter(c => c).length === storage.count) {
-            const base64String = storage.chunks.join('');
-            const dataUrl = `data:${storage.mime};base64,${base64String}`;
-            displayMessage(senderName, chunkData.content, dataUrl);
-            delete imageChunks[imgId];
-        }
-    }
-
-    // --- SENDING LOGIC (No changes needed, broadcasts to all 'connections') ---
-    
-    async function sendMessage() {
+    function sendMessage() {
         const content = document.getElementById('message-input').value.trim();
-        const imgFile = file;
 
-        if (!content && !imgFile) {
-            alert("Please enter a message or select a picture.");
+        if (!conn || !conn.open) {
+            alert("Not connected to a peer!");
+            return;
+        }
+
+        if (!content) {
+            alert("Please enter a message.");
             return;
         }
         
-        let sentCount = 0;
-
-        if (imgFile) {
-            sentCount = await sendFileInChunks(imgFile, content);
-        } else {
-            const messageData = { type: 'message', sender: peer.id, senderName: USERNAME, content: content };
-            sentCount = sendDataToPeers(messageData);
-        }
+        const messageData = { 
+            type: 'message', 
+            sender: peer.id, 
+            senderName: USERNAME, 
+            content: content 
+        };
         
-        if (sentCount > 0) {
-            const imageDataUrl = imgFile ? URL.createObjectURL(imgFile) : null;
-            displayMessage('YOU', content, imageDataUrl);
-            
-            document.getElementById('message-input').value = '';
-            document.getElementById('file-input').value = '';
-            document.getElementById('file-status').innerText = 'No file selected.';
-            file = null;
-        } else {
-            alert("No open connections found! Please connect to a peer first.");
-        }
-    }
-    
-    function sendDataToPeers(data) {
-        let count = 0;
-        for (const peerId in connections) {
-            const conn = connections[peerId];
-            if (conn && conn.open) { 
-                conn.send(data);
-                count++;
-            }
-        }
-        return count;
-    }
-
-    function sendFileInChunks(imgFile, content) {
-        return new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onload = function(evt) {
-                const base64Data = evt.target.result.split(',')[1];
-                const totalChunks = Math.ceil(base64Data.length / CHUNK_SIZE);
-                const imgId = peer.id + Date.now();
-                let sentCount = 0;
-
-                const startData = {
-                    type: 'image_start',
-                    id: imgId,
-                    count: totalChunks,
-                    mime: imgFile.type,
-                    senderName: USERNAME,
-                };
-                sentCount = sendDataToPeers(startData);
-                if (sentCount === 0) return resolve(0);
-
-                for (let i = 0; i < totalChunks; i++) {
-                    const start = i * CHUNK_SIZE;
-                    const end = Math.min((i + 1) * CHUNK_SIZE, base64Data.length);
-                    
-                    const chunkData = {
-                        type: 'image_chunk',
-                        id: imgId,
-                        index: i,
-                        count: totalChunks,
-                        data: base64Data.substring(start, end),
-                        senderName: (i === totalChunks - 1) ? USERNAME : null, 
-                        content: (i === totalChunks - 1) ? content : null 
-                    };
-                    sendDataToPeers(chunkData);
-                }
-                
-                resolve(sentCount);
-            };
-            reader.readAsDataURL(imgFile);
-        });
+        conn.send(messageData);
+        displayMessage('YOU', content);
+        
+        document.getElementById('message-input').value = '';
     }
 
     // --- INITIALIZATION ---
